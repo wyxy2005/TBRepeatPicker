@@ -15,19 +15,12 @@ enum TBRPFrequency: Int {
     case Yearly = 3
 }
 
-let frequencies = ["每天", "每周", "每月", "每年"]
-let units = ["天", "周", "月", "年"]
-let pluralUnits = ["天s", "周s", "月s", "年s"]
-
-let TBRPScreenWidth: CGFloat = UIScreen.mainScreen().bounds.size.width
-let TBRPScreenHeight: CGFloat = UIScreen.mainScreen().bounds.size.height
-
 private let TBRPCustomRepeatCellID = "TBRPCustomRepeatCell"
 private let TBRPPickerViewCellID = "TBRPPickerViewCell"
 private let TBRPSwitchCellID = "TBRPSwitchCell"
 private let TBRPCollectionViewCellID = "TBRPCollectionViewCell"
 
-class TBRPCustomRepeatController: UITableViewController, TBRPPickerCellDelegate, TBRPSwitchCellDelegate {
+class TBRPCustomRepeatController: UITableViewController, TBRPPickerCellDelegate, TBRPSwitchCellDelegate, TBRPCollectionViewCellDelegate {
     // MARK: - Public properties
     var tintColor: UIColor?
     var locale = NSLocale.currentLocale()
@@ -52,8 +45,13 @@ class TBRPCustomRepeatController: UITableViewController, TBRPPickerCellDelegate,
         }
     }
     var selectedDaysInMonth = [Int]()
+    var selectedMonthsInYear = [Int]()
     
     // MARK: - Private properties
+    private var frequencies = [String]()
+    private var units = [String]()
+    private var pluralUnits = [String]()
+    
     private let frequencyTitleIndexpath = NSIndexPath(forRow: 0, inSection: 0)
     private var everyTitleIndexpath: NSIndexPath? {
         get {
@@ -88,6 +86,10 @@ class TBRPCustomRepeatController: UITableViewController, TBRPPickerCellDelegate,
     override func viewDidLoad() {
         super.viewDidLoad()
 
+        commonInit()
+    }
+    
+    func commonInit() {
         navigationItem.title = "自定义";
         
         if let tintColor = tintColor {
@@ -95,22 +97,19 @@ class TBRPCustomRepeatController: UITableViewController, TBRPPickerCellDelegate,
             tableView.tintColor = tintColor
         }
         
+        frequencies = TBRPHelper.frequencies(locale)
+        units = TBRPHelper.units(locale)
+        pluralUnits = TBRPHelper.pluralUnits(locale)
+        
         showWeekPicker = false
+        
+        let todayIndexInMonth = NSCalendar.dayIndexInMonth(NSDate(), locale: locale)
+        selectedDaysInMonth = [todayIndexInMonth]
+        let todayMonthIndex = NSCalendar.monthIndexInYear(NSDate(), locale: locale)
+        selectedMonthsInYear = [todayMonthIndex]
     }
     
     // MARK: - Helper
-    func weekdays() -> [String] {
-        let dateFormatter = NSDateFormatter()
-        dateFormatter.locale = locale
-        return dateFormatter.weekdaySymbols
-    }
-    
-    func monthdays() -> [String] {
-        let dateFormatter = NSDateFormatter()
-        dateFormatter.locale = locale
-        return dateFormatter.monthSymbols
-    }
-    
     func hasRepeatPicker() -> Bool {
         return repeatPickerIndexPath != nil
     }
@@ -125,6 +124,7 @@ class TBRPCustomRepeatController: UITableViewController, TBRPPickerCellDelegate,
         }
         
         tableView.deleteRowsAtIndexPaths([repeatPickerIndexPath!], withRowAnimation: .Fade)
+        repeatPickerIndexPath = nil
     }
     
     func closeWeekPicker() {
@@ -133,6 +133,7 @@ class TBRPCustomRepeatController: UITableViewController, TBRPPickerCellDelegate,
         }
         
         tableView.deleteRowsAtIndexPaths([weekPickerIndexPath!], withRowAnimation: .Fade)
+        weekPickerIndexPath = nil
     }
     
     func isRepeatPickerCell(indexPath: NSIndexPath) -> Bool {
@@ -140,7 +141,7 @@ class TBRPCustomRepeatController: UITableViewController, TBRPPickerCellDelegate,
     }
     
     func isWeekPickerCell(indexPath: NSIndexPath) -> Bool {
-        return hasWeekPicker() && weekPickerIndexPath == indexPath
+        return hasWeekPicker() && weekPickerIndexPath == indexPath && (frequency == .Monthly || frequency == .Yearly)
     }
     
     func isMonthsCollectionCell(indexPath: NSIndexPath) -> Bool {
@@ -153,8 +154,8 @@ class TBRPCustomRepeatController: UITableViewController, TBRPPickerCellDelegate,
     
     func setupData() {
         // reset selected days in week
-        let todayIndex = NSCalendar.dayIndexInWeek(NSDate(), locale: locale)
-        selectedDaysInWeek = [todayIndex]
+        let todayIndexInWeek = NSCalendar.dayIndexInWeek(NSDate(), locale: locale)
+        selectedDaysInWeek = [todayIndexInWeek]
         
         // refresh weekPickerIndexPath
         if showWeekPicker == true {
@@ -216,7 +217,6 @@ class TBRPCustomRepeatController: UITableViewController, TBRPPickerCellDelegate,
             tableView.beginUpdates()
             if hasRepeatPicker() {
                 closeRepeatPicker()
-                repeatPickerIndexPath = nil
             }
             
             
@@ -232,7 +232,6 @@ class TBRPCustomRepeatController: UITableViewController, TBRPPickerCellDelegate,
             tableView.beginUpdates()
             if hasRepeatPicker() {
                 closeRepeatPicker()
-                repeatPickerIndexPath = nil
             }
             
             if showWeekPicker == true {
@@ -240,7 +239,6 @@ class TBRPCustomRepeatController: UITableViewController, TBRPPickerCellDelegate,
                 tableView.insertRowsAtIndexPaths([weekPickerIndexPath!], withRowAnimation: .Fade)
             } else if showWeekPicker == false {
                 closeWeekPicker()
-                weekPickerIndexPath = nil
             }
             
             tableView.endUpdates()
@@ -341,14 +339,14 @@ class TBRPCustomRepeatController: UITableViewController, TBRPPickerCellDelegate,
         if indexPath.section == 0 {
             if isRepeatPickerCell(indexPath) {
                 if indexPath == NSIndexPath(forRow: 1, inSection: 0) {
-                    let cell = TBRPPickerViewCell(style: .Default, reuseIdentifier: TBRPPickerViewCellID, pickerStyle: .Frequency)
+                    let cell = TBRPPickerViewCell(style: .Default, reuseIdentifier: TBRPPickerViewCellID, pickerStyle: .Frequency, locale: locale)
                     cell.frequency = frequency
                     cell.delegate = self
                     cell.selectionStyle = .None
                     cell.accessoryType = .None
                     return cell
                 } else {
-                    let cell = TBRPPickerViewCell(style: .Default, reuseIdentifier: TBRPPickerViewCellID, pickerStyle: .Every)
+                    let cell = TBRPPickerViewCell(style: .Default, reuseIdentifier: TBRPPickerViewCellID, pickerStyle: .Every, locale: locale)
                     cell.unit = unit()
                     cell.every = every
                     cell.delegate = self
@@ -382,9 +380,9 @@ class TBRPCustomRepeatController: UITableViewController, TBRPPickerCellDelegate,
                 }
                 cell?.selectionStyle = .Default
                 
-                cell?.textLabel?.text = weekdays()[indexPath.row]
+                cell?.textLabel?.text = TBRPHelper.weekdays(locale)[indexPath.row]
                 cell?.detailTextLabel?.text = nil
-                if selectedDaysInWeek.contains(indexPath.row) == true {
+                if selectedDaysInWeek.contains(indexPath.row + 1) == true {
                     cell?.accessoryType = .Checkmark
                 } else {
                     cell?.accessoryType = .None
@@ -394,13 +392,16 @@ class TBRPCustomRepeatController: UITableViewController, TBRPPickerCellDelegate,
             } else if frequency == .Monthly {
                 if indexPath.row == 2 {
                     if showWeekPicker == true {
-                        let cell = TBRPPickerViewCell(style: .Default, reuseIdentifier: TBRPPickerViewCellID, pickerStyle: .Week)
+                        let cell = TBRPPickerViewCell(style: .Default, reuseIdentifier: TBRPPickerViewCellID, pickerStyle: .Week, locale: locale)
                         cell.delegate = self
                         cell.selectionStyle = .None
                         cell.accessoryType = .None
                         return cell
                     } else {
-                        let cell = TBRPCollectionViewCell(style: .Default, reuseIdentifier: TBRPCollectionViewCellID, mode: .Days)
+                        let cell = TBRPCollectionViewCell(style: .Default, reuseIdentifier: TBRPCollectionViewCellID, mode: .Days, locale: locale)
+                        cell.selectionStyle = .None
+                        cell.selectedDaysInMonth = selectedDaysInMonth
+                        cell.delegate = self
                         
                         return cell
                     }
@@ -438,17 +439,12 @@ class TBRPCustomRepeatController: UITableViewController, TBRPPickerCellDelegate,
                     return cell!
                 }
             } else {
-                var cell = tableView.dequeueReusableCellWithIdentifier(TBRPCustomRepeatCellID)
-                if cell == nil {
-                    cell = UITableViewCell(style: .Value1, reuseIdentifier: TBRPCustomRepeatCellID)
-                }
+                let cell = TBRPCollectionViewCell(style: .Default, reuseIdentifier: TBRPCollectionViewCellID, mode: .Months, locale: locale)
+                cell.selectionStyle = .None
+                cell.selectedMonthsInYear = selectedMonthsInYear
+                cell.delegate = self
                 
-                cell?.textLabel?.text = nil
-                cell?.detailTextLabel?.text = nil
-                cell!.selectionStyle = .None
-                cell!.accessoryType = .None
-                
-                return cell!
+                return cell
             }
         } else {
             if indexPath.row == 0 {
@@ -466,7 +462,7 @@ class TBRPCustomRepeatController: UITableViewController, TBRPPickerCellDelegate,
                 
                 return cell
             } else {
-                let cell = TBRPPickerViewCell(style: .Default, reuseIdentifier: TBRPPickerViewCellID, pickerStyle: .Week)
+                let cell = TBRPPickerViewCell(style: .Default, reuseIdentifier: TBRPPickerViewCellID, pickerStyle: .Week, locale: locale)
                 cell.delegate = self
                 cell.selectionStyle = .None
                 cell.accessoryType = .None
@@ -488,10 +484,11 @@ class TBRPCustomRepeatController: UITableViewController, TBRPPickerCellDelegate,
                 tableView.beginUpdates()
                 
                 if hasRepeatPicker() {
+                    let repeatPickerIndexPathTemp = repeatPickerIndexPath
                     closeRepeatPicker()
                     
-                    if indexPath.row == (repeatPickerIndexPath?.row)! - 1 {
-                        repeatPickerIndexPath = nil
+                    if indexPath.row == (repeatPickerIndexPathTemp!.row) - 1 {
+                        
                     } else {
                         if indexPath == frequencyTitleIndexpath {
                             repeatPickerIndexPath = NSIndexPath(forRow: indexPath.row + 1, inSection: indexPath.section)
@@ -510,13 +507,18 @@ class TBRPCustomRepeatController: UITableViewController, TBRPPickerCellDelegate,
             } else if indexPath.section == 1 {
                 if frequency == .Weekly {
                     let cell = tableView.cellForRowAtIndexPath(indexPath)
+                    let day = indexPath.row + 1
                     
-                    if selectedDaysInWeek.contains(indexPath.row) == false {
-                        cell?.accessoryType = .Checkmark
-                        selectedDaysInWeek.append(indexPath.row)
-                    } else if selectedDaysInWeek.count > 1 {
+                    if selectedDaysInWeek.count == 1 && selectedDaysInWeek.contains(day) == true {
+                        return
+                    }
+                    
+                    if selectedDaysInWeek.contains(day) == true {
                         cell?.accessoryType = .None
-                        selectedDaysInWeek.removeObject(indexPath.row)
+                        selectedDaysInWeek.removeObject(day)
+                    } else {
+                        cell?.accessoryType = .Checkmark
+                        selectedDaysInWeek.append(day)
                     }
                 } else if frequency == .Monthly {
                     let dateCell = tableView.cellForRowAtIndexPath(NSIndexPath(forRow: 0, inSection: 1))
@@ -552,4 +554,25 @@ class TBRPCustomRepeatController: UITableViewController, TBRPPickerCellDelegate,
         }
     }
     
+    
+    // MARK: - TBRPCollectionViewCell delegate
+    func selectedDaysInMonthDidChanged(selectedDays: [Int]) {
+        if hasRepeatPicker() {
+            tableView.beginUpdates()
+            closeRepeatPicker()
+            tableView.endUpdates()
+        }
+        
+        selectedDaysInMonth = selectedDays
+    }
+    
+    func selectedMonthsInYearDidChanged(selectedMonths: [Int]) {
+        if hasRepeatPicker() {
+            tableView.beginUpdates()
+            closeRepeatPicker()
+            tableView.endUpdates()
+        }
+        
+        selectedMonthsInYear = selectedMonths
+    }
 }
